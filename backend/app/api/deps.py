@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -6,6 +7,8 @@ from app.db.session import AsyncSessionLocal
 from app.security import decode_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+logger = logging.getLogger(__name__)
 
 
 async def get_db():
@@ -63,7 +66,17 @@ async def get_router_client():
         cached = _client_cache.get(dev.id)
         if cached is not None:
             return cached
-        client = await create_client_for_device(dev)
+        try:
+            client = await create_client_for_device(dev)
+        except Exception as exc:
+            # 最常见的原因：data/secret.key 被换掉或丢了，数据库里加密的密码解不开。
+            # 以前这里会直接 500 甩一串堆栈，用户完全看不出该做什么。
+            logger.warning("无法为设备 #%s 构造客户端：%s", dev.id, exc, exc_info=True)
+            raise HTTPException(
+                http_status.HTTP_409_CONFLICT,
+                f"读不出设备「{dev.name}」保存的密码（data/secret.key 可能被更换过），"
+                f"请到设置里重新填写该设备的密码",
+            )
         _client_cache[dev.id] = client
         return client
 

@@ -12,14 +12,11 @@ services:
     image: zmomo923/rpanel:latest
     container_name: rpanel
     restart: unless-stopped
-
     ports:
       # ① 对外端口：左边随便改，右边固定 8000 不要动
       - "8990:8000"
-
     volumes:
       # ② 数据目录：左边随便改（Windows 可写 D:/rpanel-data），右边固定 /data 不要动
       #    数据库、密钥、日志、首次登录密码都在这里面，备份这个目录即可
       - "./data:/data"
-
     # 内网使用；如需限制来源，改成 "192.168.8.10:8990:8000" 之类
