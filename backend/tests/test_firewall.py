@@ -1,5 +1,14 @@
 import pytest
+import app.services.firewall as firewall_module
 from app.services.firewall import FirewallService
+
+
+@pytest.fixture(autouse=True)
+def _current_device(monkeypatch):
+    """封禁记录现在按设备划分，测试里固定成 1 号设备。"""
+    async def fake_device_id(db):
+        return 1
+    monkeypatch.setattr(firewall_module, "current_device_id", fake_device_id)
 
 
 class FakeRosClient:
@@ -29,7 +38,11 @@ class FakeDb:
         self.blocked: dict[str, object] = {}
         self.logs = []
 
-    async def get(self, model, ip):
+    async def get(self, model, key):
+        # 主键现在是 (device_id, ip) 复合键
+        if isinstance(key, tuple):
+            key = key[1]
+        ip = key
         return self.blocked.get(ip)
 
     def add(self, obj):

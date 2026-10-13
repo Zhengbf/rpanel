@@ -27,6 +27,17 @@ class TrafficStore:
     def __init__(self):
         self._series: dict[str, RingSeries] = {}
         self._lock = asyncio.Lock()
+        # 当前采样的是哪台设备。换设备时清空内存曲线，
+        # 否则上一台路由器的接口/IP 会继续留在图上。
+        self.device_id: int | None = None
+
+    def bind_device(self, device_id: int | None) -> bool:
+        """切到另一台路由器时丢弃内存里的历史曲线。返回是否发生了切换。"""
+        if device_id == self.device_id:
+            return False
+        self._series.clear()
+        self.device_id = device_id
+        return True
 
     def series(self, dimension: str, key: str) -> RingSeries:
         k = f"{dimension}:{key}"
@@ -77,6 +88,7 @@ class TrafficStore:
             rx = sum(w[1] for w in win) / len(win)
             tx = sum(w[2] for w in win) / len(win)
             rows.append(TrafficHistory(ts=now, dimension=dimension, key=key,
+                                       device_id=self.device_id,
                                        rx_bytes=int(rx * 60), tx_bytes=int(tx * 60)))
         if not rows:
             return

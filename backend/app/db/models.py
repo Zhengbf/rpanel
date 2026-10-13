@@ -50,6 +50,8 @@ class AuditLog(Base):
 
 class DeviceNote(Base):
     __tablename__ = "device_notes"
+    # 备注跟着"哪台路由器"走：同一台设备在两台路由器上可以有不同的备注
+    device_id = Column(Integer, primary_key=True)
     ip = Column(String(64), primary_key=True)
     mac = Column(String(32), nullable=True, index=True)
     note = Column(Text, default="")
@@ -59,6 +61,8 @@ class DeviceNote(Base):
 class TrafficHistory(Base):
     __tablename__ = "traffic_history"
     id = Column(Integer, primary_key=True)
+    # 属于哪台路由器。没绑定设备时为 NULL；换绑设备后统计不会串台。
+    device_id = Column(Integer, nullable=True, index=True)
     ts = Column(DateTime, nullable=False, index=True)
     dimension = Column(String(16), nullable=False, index=True)
     key = Column(String(128), nullable=False, index=True)
@@ -68,6 +72,9 @@ class TrafficHistory(Base):
 
 class BlockedIp(Base):
     __tablename__ = "blocked_ips"
+    # 封禁是路由器上的状态，必须按设备分开存，
+    # 否则换绑后旧路由器的封禁列表会被对账下发到新路由器上。
+    device_id = Column(Integer, primary_key=True)
     ip = Column(String(64), primary_key=True)
     reason = Column(Text, default="")
     blocked_by = Column(String(64), nullable=True)
@@ -76,6 +83,8 @@ class BlockedIp(Base):
 
 class KnownDevice(Base):
     __tablename__ = "known_devices"
+    # 新设备告警也按设备分开：另一台路由器上的 MAC 不该让这台静音
+    device_id = Column(Integer, primary_key=True)
     mac = Column(String(32), primary_key=True)
     first_ip = Column(String(64), nullable=True)
     hostname = Column(String(128), nullable=True)

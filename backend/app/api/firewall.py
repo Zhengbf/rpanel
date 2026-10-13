@@ -7,6 +7,7 @@ from app.services.firewall import FirewallService
 from app.db.session import AsyncSessionLocal
 from app.db.models import BlockedIp
 from app.services.sampler import detect_wan_interfaces
+from app.services.scope import current_device_id
 
 router = APIRouter(prefix="/api/firewall", tags=["firewall"])
 
@@ -71,7 +72,12 @@ async def list_blocked(
     client=Depends(get_router_client),
 ):
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(select(BlockedIp))).scalars().all()
+        device_id = await current_device_id(db)
+        if device_id is None:
+            return []
+        rows = (await db.execute(
+            select(BlockedIp).where(BlockedIp.device_id == device_id)
+        )).scalars().all()
     return [{"ip": r.ip, "reason": r.reason, "blocked_by": r.blocked_by,
              "blocked_at": str(r.blocked_at)} for r in rows]
 

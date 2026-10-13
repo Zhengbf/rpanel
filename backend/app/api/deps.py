@@ -35,6 +35,18 @@ async def require_writable(request: Request) -> None:
 _client_cache: dict = {}
 
 
+async def get_current_device_id() -> int | None:
+    """当前默认设备（正在被采样/管理的那台路由器）的 id；没绑定设备时为 None。"""
+    from app.db.models import RouterDevice
+    from sqlalchemy import select
+
+    async with AsyncSessionLocal() as db:
+        dev = (await db.execute(
+            select(RouterDevice).where(RouterDevice.is_default == True)  # noqa: E712
+        )).scalar_one_or_none()
+    return dev.id if dev else None
+
+
 async def get_router_client():
     from app.db.models import RouterDevice
     from sqlalchemy import select
