@@ -75,10 +75,8 @@ services:
     image: zmomo923/rpanel:latest
     container_name: rpanel
     restart: unless-stopped
-
     ports:
       - "8990:8000"        # 左侧改成你想用的端口
-
     volumes:
       - "./data:/data"     # 左侧改成你想保存数据的目录
 ```
