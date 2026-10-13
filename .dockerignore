@@ -1,0 +1,31 @@
+# 依赖与构建产物（镜像里会重新构建）
+**/node_modules
+frontend/dist
+backend/app/static
+
+# 个人数据与敏感文件（绝不能进镜像）
+**/data/
+**/logs/
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.rsc
+**/*.backup
+**/.env
+**/secret.key
+**/initial_admin_password.txt
+data/
+data-dev/
+
+# 开发与杂项
+work/
+outputs/
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+.git/
+.gitignore
+**/*.pid
+**/*.log

@@ -1,0 +1,19 @@
+# 开发模式：挂载后端源码并热重载；前端单独跑 npm run dev（vite 代理到 8000）
+# 用法：docker compose -f docker-compose-dev.yaml up
+services:
+  routerpanel:
+    build:
+      context: .
+    image: routerpanel:dev
+    container_name: routerpanel-dev
+    restart: "no"
+    ports:
+      - "${PANEL_PORT:-8000}:8000"
+    environment:
+      DATA_DIR: /data
+      READONLY_MODE: "true"      # 开发时默认只读，避免误改生产路由器
+      SAMPLE_INTERVAL: "3"
+    volumes:
+      - "${DATA_DIR:-./data-dev}:/data"
+      - ./backend/app:/app/app:ro
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+    <title>RPanel</title>
+  <script>
+    // 在样式生效前决定主题，避免首帧用错主题导致颜色被缓存在合成层里
+    (function () {
+      try {
+        var t = localStorage.getItem('rp-theme')
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        }
+        document.documentElement.dataset.theme = t
+        var f = localStorage.getItem('rp-fx')
+        document.documentElement.dataset.fx = (f === 'off') ? 'off' : 'full'
+      } catch (e) {
+        document.documentElement.dataset.theme = 'dark'
+        document.documentElement.dataset.fx = 'full'
+      }
+    })()
+  </script>
+</head>
+<body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
+</html>
