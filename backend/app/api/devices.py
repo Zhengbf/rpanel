@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.api.deps import get_db, get_current_user, get_router_client, DbSession
 from app.db.models import DeviceNote, AuditLog
 from app.services.devices import DeviceService
+from app.services.scope import current_device_id
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
@@ -23,7 +24,12 @@ async def list_devices(
 ):
     svc = DeviceService(client)
     devices = await svc.list_devices()
-    notes = (await db.execute(select(DeviceNote))).scalars().all()
+    device_id = await current_device_id(db)
+    notes = []
+    if device_id is not None:
+        notes = (await db.execute(
+            select(DeviceNote).where(DeviceNote.device_id == device_id)
+        )).scalars().all()
     note_map = {n.ip: n.note for n in notes}
     for d in devices:
             d.note = note_map.get(d.ip, "") or (d.comment if hasattr(d, "comment") else "")
@@ -36,12 +42,15 @@ async def set_note(
     user: dict = Depends(get_current_user),
     db: DbSession = None,
 ):
-    existing = await db.get(DeviceNote, body.ip)
+    device_id = await current_device_id(db)
+    if device_id is None:
+        return {"ok": False, "detail": "尚未绑定路由器设备"}
+    existing = await db.get(DeviceNote, (device_id, body.ip))
     if existing:
         existing.note = body.note
         existing.mac = body.mac or existing.mac
     else:
-        db.add(DeviceNote(ip=body.ip, mac=body.mac, note=body.note))
+        db.add(DeviceNote(device_id=device_id, ip=body.ip, mac=body.mac, note=body.note))
     db.add(AuditLog(user_id=user["user_id"], username=user["username"],
                     action="set_note", target=body.ip, detail=body.note))
     await db.commit()

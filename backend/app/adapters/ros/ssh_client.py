@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import logging
 import re
 import asyncssh
 from app.adapters.ros.base import (
@@ -11,6 +12,8 @@ from app.adapters.ros.parser import (
     parse_detail_blocks, parse_bytes_value, parse_human_size, parse_percent,
     to_connection_entry,
 )
+
+logger = logging.getLogger(__name__)
 
 _SAFE_IFACE = re.compile(r"^[a-zA-Z0-9_.\-]+$")
 _SAFE_IP = re.compile(r"^[0-9a-fA-F.:]+$")
@@ -61,8 +64,12 @@ class SshRouterOsClient:
             return ConnectionTestResult(ok=False, message="SSH 认证失败：用户名或密码错误")
         except asyncssh.DisconnectError as e:
             return ConnectionTestResult(ok=False, message=f"SSH 连接被断开：{e.code}")
-        except (OSError, asyncio.TimeoutError):
-            return ConnectionTestResult(ok=False, message="无法连接到路由器，请检查 IP/端口/SSH 服务")
+        except (OSError, asyncio.TimeoutError) as e:
+            from app.adapters.ros.rest_client import describe_connect_error
+            detail = describe_connect_error(e)
+            logger.warning("SSH 测试连接失败：%s:%s -> %s", self.host, self.port, detail,
+                           exc_info=True)
+            return ConnectionTestResult(ok=False, message=f"连不上路由器（SSH）：{detail}")
         except Exception as e:
             return ConnectionTestResult(ok=False, message=f"SSH 连接失败：{type(e).__name__}")
         if not entries:

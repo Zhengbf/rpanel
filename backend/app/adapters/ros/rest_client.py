@@ -4,6 +4,7 @@ RouterOS 7 REST API 适配器。
 from __future__ import annotations
 import asyncio
 import json
+import logging
 import httpx
 from app.adapters.ros.base import (
     ConnectionTestResult, SystemResource, InterfaceInfo,
@@ -11,6 +12,34 @@ from app.adapters.ros.base import (
     DhcpServer, DhcpNetwork, IpPool, PortForward,
 )
 from app.adapters.ros.parser import to_connection_entry
+
+logger = logging.getLogger(__name__)
+
+
+def describe_connect_error(exc: BaseException) -> str:
+    """把底层连接异常翻译成能直接定位问题的一句话。
+
+    以前这里只回“无法连接到路由器，请检查 IP/端口/HTTPS”，
+    无论是主机不可达、超时、端口没服务还是 TLS 握手失败都长得一样，
+    排查时只能靠猜。现在把 errno / 底层类型还原出来。
+    """
+    cause = exc.__cause__ or exc
+    errno_value = getattr(cause, "errno", None)
+    text = f"{type(cause).__name__}: {cause}"
+    low = text.lower()
+
+    if "wrong version number" in low or "record layer" in low or "ssl" in low \
+            or "certificate" in low:
+        return "TLS 握手失败：该端口不是 HTTPS 服务（REST 要用 443，SSH 要用 22）"
+    if errno_value in (101, 113) or "unreachable" in low or "no route" in low:
+        return "主机不可达（no route to host）：这台机器到路由器的网络不通"
+    if errno_value == 111 or "refused" in low:
+        return "连接被拒绝：端口上没有服务在监听"
+    if errno_value == 110 or "timed out" in low or "timeout" in low:
+        return "连接超时：目标没有响应（可能被防火墙丢弃）"
+    if "name or service not known" in low or "nodename" in low or "getaddrinfo" in low:
+        return "主机名解析失败：请直接填路由器 IP"
+    return text
 
 
 class RestRouterOsClient:
@@ -27,8 +56,11 @@ class RestRouterOsClient:
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
+            # trust_env=False：不读宿主机的 HTTP(S)_PROXY。
+            # 容器里被塞进代理变量时，内网地址会被错误地丢给代理，直接连不上路由器。
             self._client = httpx.AsyncClient(base_url=self.base_url, auth=self._auth,
-                                             verify=self._verify, timeout=self._timeout)
+                                             verify=self._verify, timeout=self._timeout,
+                                             trust_env=False)
         return self._client
 
     async def _get(self, path: str) -> list | dict:
@@ -52,10 +84,18 @@ class RestRouterOsClient:
             if code in (401, 403):
                 return ConnectionTestResult(ok=False, message="认证失败：用户名或密码错误，或权限不足")
             return ConnectionTestResult(ok=False, message=f"HTTP 错误 {code}")
-        except httpx.ConnectError:
-            return ConnectionTestResult(ok=False, message="无法连接到路由器，请检查 IP/端口/HTTPS")
+        except httpx.ConnectTimeout:
+            logger.warning("测试连接超时：%s（%s 秒）", self.base_url, self._timeout)
+            return ConnectionTestResult(
+                ok=False, message="连接超时：路由器没有响应，检查端口是否可达（可能被防火墙丢弃）")
+        except httpx.ConnectError as e:
+            detail = describe_connect_error(e)
+            logger.warning("测试连接失败：%s -> %s", self.base_url, detail, exc_info=True)
+            return ConnectionTestResult(ok=False, message=f"连不上路由器：{detail}")
         except Exception as e:
-            return ConnectionTestResult(ok=False, message=f"连接失败：{type(e).__name__}")
+            detail = describe_connect_error(e)
+            logger.warning("测试连接异常：%s -> %s", self.base_url, detail, exc_info=True)
+            return ConnectionTestResult(ok=False, message=f"连接失败：{detail}")
         try:
             identity_raw = await self._get("/system/identity")
             identity = identity_raw.get("name", "") if isinstance(identity_raw, dict) else ""

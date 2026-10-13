@@ -7,6 +7,7 @@ from app.db.session import AsyncSessionLocal
 from sqlalchemy import select, func
 from app.db.models import BlockedIp
 from app.services.devices import DeviceService
+from app.services.scope import current_device_id
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -112,8 +113,13 @@ async def overview(
             per_iface[name] = {"rx": last[1], "tx": last[2]}
 
     async with AsyncSessionLocal() as db:
-        blocked_count = (await db.execute(
-            select(func.count(BlockedIp.ip)))).scalar() or 0
+        # 只统计"当前这台路由器"的封禁数，换绑后不会带上一台的数字
+        device_id = await current_device_id(db)
+        blocked_count = 0
+        if device_id is not None:
+            blocked_count = (await db.execute(
+                select(func.count()).select_from(BlockedIp)
+                .where(BlockedIp.device_id == device_id))).scalar() or 0
 
     mem_used = (res.total_memory - res.free_memory) if res else 0
     mem_total = res.total_memory if res else 0

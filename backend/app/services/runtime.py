@@ -29,6 +29,7 @@ class Runtime:
             from app.db.models import RouterDevice
             from app.db.session import AsyncSessionLocal
             from app.adapters.ros.factory import create_client_for_device
+            from app.services.traffic import store as traffic_store
 
             try:
                 async with AsyncSessionLocal() as db:
@@ -36,8 +37,13 @@ class Runtime:
                         select(RouterDevice).where(RouterDevice.is_default == True)  # noqa: E712
                     )).scalar_one_or_none()
                 if dev is None:
+                    # 没有绑定设备时不该留着上一台的曲线
+                    traffic_store.bind_device(None)
                     logger.info("未绑定默认设备，采样器不启动")
                     return False
+                # 换设备（或首次启动）时清掉内存曲线，避免两台路由器的数据混在一张图上
+                if traffic_store.bind_device(dev.id):
+                    logger.info("切换采样目标为设备 #%s（内存曲线已重置）", dev.id)
                 client = await create_client_for_device(dev)
                 sampler = Sampler(client)
                 await sampler.start()
