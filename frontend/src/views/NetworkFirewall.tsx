@@ -5,7 +5,7 @@
  * 用户自己写的等效规则会显示"已有自建规则"，取消时不会被删除。
  */
 import { useCallback, useEffect, useState } from 'react'
-import { RefreshCw, ShieldCheck, ShieldOff, TriangleAlert } from 'lucide-react'
+import { Check, RefreshCw, ShieldCheck, ShieldOff, TriangleAlert, X } from 'lucide-react'
 import api from '../api/client'
 import { PageHeader, Segmented, Badge, EmptyState, Skeleton, Input, Button } from '../components/ui'
 import { ConfirmModal } from '../components/ui/Modal'
@@ -34,7 +34,6 @@ interface PortRule {
   wan: string
   managed: boolean
   user_rule: boolean
-  effective: boolean
   chains: string[]
   v4: { allowed: boolean; managed: boolean; user_rule: boolean }
   v6: { allowed: boolean; managed: boolean; user_rule: boolean }
@@ -59,16 +58,26 @@ interface ScenesData {
   }
 }
 
-function StateBadge({ state }: { state: SceneState }) {
-  if (state.allowed) {
-    return (
-      <span className="inline-flex items-center gap-1.5">
-        <Badge tone="signal">已放通</Badge>
-        {state.user_rule && !state.managed && <Badge tone="ice">你的规则</Badge>}
-      </span>
-    )
-  }
-  return <Badge tone="gray">未放通</Badge>
+/** 地址族状态：文字 + 图标，未放通用虚线框，避免只靠颜色区分 */
+function FamilyStatus({ family, allowed, source }: {
+  family: string
+  allowed: boolean
+  source?: 'panel' | 'user'
+}) {
+  const style: React.CSSProperties = allowed
+    ? { background: 'var(--signal-dim)', color: 'var(--signal)' }
+    : { border: '1px dashed var(--border-strong)', color: 'var(--text-3)' }
+  const hint = allowed
+    ? (source === 'user' ? '来自你手写的规则' : '由面板创建')
+    : '未放通'
+  return (
+    <span title={hint}
+      className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+      style={style}>
+      {allowed ? <Check size={11} strokeWidth={3} /> : <X size={11} strokeWidth={3} />}
+      {family} {allowed ? '已放通' : '未放通'}
+    </span>
+  )
 }
 
 export default function NetworkFirewall() {
@@ -228,7 +237,7 @@ export default function NetworkFirewall() {
                 <div className="table-wrap">
                   <table className="data-table">
                     <thead>
-                      <tr>{['协议', '端口', 'WAN', '地址族', '链', '来源', ''].map((h, i) => <th key={i}>{h}</th>)}</tr>
+                      <tr>{['协议', '端口', 'WAN', '放通状态', '链', '来源', ''].map((h, i) => <th key={i}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {data.scenes.port_rules.map(r => (
@@ -237,15 +246,16 @@ export default function NetworkFirewall() {
                           <td className="mono">{r.ports}</td>
                           <td className="mono">{r.wan}</td>
                           <td>
-                            <span className="inline-flex gap-1.5">
-                              <Badge tone={r.v4.allowed ? 'signal' : 'gray'}>IPv4</Badge>
-                              <Badge tone={r.v6.allowed ? 'signal' : 'gray'}>IPv6</Badge>
+                            <span className="inline-flex flex-col items-start gap-1">
+                              <FamilyStatus family="IPv4" allowed={r.v4.allowed}
+                                source={r.v4.user_rule ? 'user' : 'panel'} />
+                              <FamilyStatus family="IPv6" allowed={r.v6.allowed}
+                                source={r.v6.user_rule ? 'user' : 'panel'} />
                             </span>
                           </td>
                           <td className="text-t3">{r.chains.join(' + ') || '—'}</td>
                           <td>
                             {r.managed ? <Badge tone="signal">面板管理</Badge> : <Badge tone="ice">你的规则</Badge>}
-                            {!r.effective && <span className="ml-2 text-[11px] text-t3">未生效</span>}
                           </td>
                           <td className="text-right">
                             {r.managed ? (
@@ -278,9 +288,11 @@ export default function NetworkFirewall() {
                 </div>
               </div>
               {lanAll && (
-                <span className="inline-flex gap-1.5 shrink-0 whitespace-nowrap">
-                  <Badge tone={lanAll.v4.allowed ? 'signal' : 'gray'}>IPv4</Badge>
-                  <Badge tone={lanAll.v6.allowed ? 'signal' : 'gray'}>IPv6</Badge>
+                <span className="inline-flex flex-col items-end gap-1 shrink-0">
+                  <FamilyStatus family="IPv4" allowed={lanAll.v4.allowed}
+                    source={lanAll.v4.user_rule ? 'user' : 'panel'} />
+                  <FamilyStatus family="IPv6" allowed={lanAll.v6.allowed}
+                    source={lanAll.v6.user_rule ? 'user' : 'panel'} />
                 </span>
               )}
             </div>
@@ -306,9 +318,11 @@ export default function NetworkFirewall() {
                 </div>
               </div>
               {wanAll && (
-                <span className="inline-flex gap-1.5 shrink-0 whitespace-nowrap">
-                  <Badge tone={wanAll.v4.allowed ? 'signal' : 'gray'}>IPv4</Badge>
-                  <Badge tone={wanAll.v6.allowed ? 'signal' : 'gray'}>IPv6</Badge>
+                <span className="inline-flex flex-col items-end gap-1 shrink-0">
+                  <FamilyStatus family="IPv4" allowed={wanAll.v4.allowed}
+                    source={wanAll.v4.user_rule ? 'user' : 'panel'} />
+                  <FamilyStatus family="IPv6" allowed={wanAll.v6.allowed}
+                    source={wanAll.v6.user_rule ? 'user' : 'panel'} />
                 </span>
               )}
             </div>
