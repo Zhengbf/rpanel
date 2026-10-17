@@ -568,18 +568,35 @@ class RestRouterOsClient:
     # --- 防火墙 filter 规则（一键放通场景使用）---
 
     async def list_filter_rules(self) -> list[dict]:
-        rules = await self._get("/ip/firewall/filter")
-        return rules if isinstance(rules, list) else []
+        """IPv4 / IPv6 是两张独立的表，返回时用 _family 标记来源。"""
+        result: list[dict] = []
+        for family, path in (("v4", "/ip/firewall/filter"),
+                             ("v6", "/ipv6/firewall/filter")):
+            try:
+                rules = await self._get(path)
+            except Exception:
+                if family == "v6":
+                    continue  # 没有 IPv6 表/权限时忽略
+                raise
+            if isinstance(rules, list):
+                for rule in rules:
+                    item = dict(rule)
+                    item["_family"] = family
+                    result.append(item)
+        return result
 
-    async def add_filter_rule(self, fields: dict, place_before: str | None = None) -> dict:
+    async def add_filter_rule(self, fields: dict, place_before: str | None = None,
+                              family: str = "v4") -> dict:
+        path = "/ipv6/firewall/filter" if family == "v6" else "/ip/firewall/filter"
         body = dict(fields)
         body.setdefault("comment", self.MANAGED_TAG)
         if place_before:
             body["place-before"] = place_before
-        return await self._put("/ip/firewall/filter", body)
+        return await self._put(path, body)
 
-    async def remove_filter_rule(self, rule_id: str) -> None:
-        await self._delete(f"/ip/firewall/filter/{rule_id}")
+    async def remove_filter_rule(self, rule_id: str, family: str = "v4") -> None:
+        path = "/ipv6/firewall/filter" if family == "v6" else "/ip/firewall/filter"
+        await self._delete(f"{path}/{rule_id}")
 
     async def list_interface_list_members(self) -> list[dict]:
         """接口列表成员（LAN / WAN），用于判断哪些口是 LAN、哪些是 WAN。"""

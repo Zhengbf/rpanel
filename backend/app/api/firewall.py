@@ -23,6 +23,7 @@ class BlockRequest(BaseModel):
 class PortSceneRequest(BaseModel):
     enable: bool
     protocol: str = Field("tcp", pattern="^(tcp|udp|both)$")
+    family: str = Field("v4", pattern="^(v4|v6|both)$")
     ports: str = Field(..., min_length=1, max_length=64)
     wan: str = Field(..., min_length=1, max_length=64)
 
@@ -173,16 +174,18 @@ async def firewall_scene_port(
     protocols = ["tcp", "udp"] if body.protocol == "both" else [body.protocol]
     try:
         if body.enable:
-            result = await firewall_scenes.allow_port(client, protocols, ports, wan)
+            result = await firewall_scenes.allow_port(client, protocols, ports, wan,
+                                                      body.family)
         else:
-            result = await firewall_scenes.revoke_port(client, protocols, ports, wan)
+            result = await firewall_scenes.revoke_port(client, protocols, ports, wan,
+                                                       body.family)
     except ValueError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except Exception as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
                             f"路由器操作失败：{type(e).__name__}")
     await _audit(user, "fw_allow_port" if body.enable else "fw_revoke_port",
-                 f"{wan}:{body.protocol}/{ports}",
+                 f"{wan}:{body.protocol}/{ports}/{body.family}",
                  f"created={result.get('created')} existed={result.get('existed')} "
                  f"removed={result.get('removed')}")
     return result

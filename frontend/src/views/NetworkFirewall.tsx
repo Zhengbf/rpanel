@@ -15,6 +15,7 @@ type SceneState = { allowed: boolean; managed: boolean; user_rule: boolean; chai
 
 interface Rule {
   id: string
+  family: string
   chain: string
   action: string
   protocol: string
@@ -35,6 +36,8 @@ interface PortRule {
   user_rule: boolean
   effective: boolean
   chains: string[]
+  v4: { allowed: boolean; managed: boolean; user_rule: boolean }
+  v6: { allowed: boolean; managed: boolean; user_rule: boolean }
 }
 
 interface WanAll {
@@ -51,7 +54,7 @@ interface ScenesData {
   rules: Rule[]
   scenes: {
     port_rules: PortRule[]
-    lan_all: SceneState
+    lan_all: { v4: SceneState; v6: SceneState }
     wan_all: WanAll[]
   }
 }
@@ -73,6 +76,7 @@ export default function NetworkFirewall() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [protocol, setProtocol] = useState<'tcp' | 'udp' | 'both'>('tcp')
+  const [portFamily, setPortFamily] = useState<'v4' | 'v6' | 'both'>('v4')
   const [ports, setPorts] = useState('')
   const [wan, setWan] = useState('')
   const [family, setFamily] = useState<'v4' | 'v6' | 'both'>('v4')
@@ -115,8 +119,8 @@ export default function NetworkFirewall() {
     if (!value) { toast.push('err', '先填端口，例如 9233 或 8000-8100'); return }
     if (!wan) { toast.push('err', '先选择 WAN 接口'); return }
     run(() => api.post('/firewall/scenes/port',
-      { enable, protocol, ports: value, wan }),
-      enable ? `已放通 ${protocol.toUpperCase()} ${value}（${wan}）`
+      { enable, protocol, ports: value, wan, family: portFamily }),
+      enable ? `已放通 ${protocol.toUpperCase()} ${value}（${portFamily === 'both' ? 'IPv4+IPv6' : portFamily.toUpperCase()}，${wan}）`
              : `已取消 ${protocol.toUpperCase()} ${value}（${wan}）`)
   }
 
@@ -194,6 +198,11 @@ export default function NetworkFirewall() {
                 { value: 'udp', label: 'UDP' },
                 { value: 'both', label: '两者' },
               ]} />
+              <Segmented size="sm" value={portFamily} onChange={setPortFamily} options={[
+                { value: 'v4', label: 'IPv4' },
+                { value: 'v6', label: 'IPv6' },
+                { value: 'both', label: '全部' },
+              ]} />
               <div className="w-44">
                 <Input value={ports} onChange={e => setPorts(e.target.value)}
                   placeholder="9233 或 8000-8100" className="mono" />
@@ -219,7 +228,7 @@ export default function NetworkFirewall() {
                 <div className="table-wrap">
                   <table className="data-table">
                     <thead>
-                      <tr>{['协议', '端口', 'WAN', '链', '来源', ''].map((h, i) => <th key={i}>{h}</th>)}</tr>
+                      <tr>{['协议', '端口', 'WAN', '地址族', '链', '来源', ''].map((h, i) => <th key={i}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {data.scenes.port_rules.map(r => (
@@ -227,6 +236,12 @@ export default function NetworkFirewall() {
                           <td>{r.protocol.toUpperCase()}</td>
                           <td className="mono">{r.ports}</td>
                           <td className="mono">{r.wan}</td>
+                          <td>
+                            <span className="inline-flex gap-1.5">
+                              <Badge tone={r.v4.allowed ? 'signal' : 'gray'}>IPv4</Badge>
+                              <Badge tone={r.v6.allowed ? 'signal' : 'gray'}>IPv6</Badge>
+                            </span>
+                          </td>
                           <td className="text-t3">{r.chains.join(' + ') || '—'}</td>
                           <td>
                             {r.managed ? <Badge tone="signal">面板管理</Badge> : <Badge tone="ice">你的规则</Badge>}
@@ -237,7 +252,8 @@ export default function NetworkFirewall() {
                               <button className="text-[12px] cursor-pointer"
                                 style={{ color: 'var(--danger)' }} disabled={busy}
                                 onClick={() => run(() => api.post('/firewall/scenes/port',
-                                  { enable: false, protocol: r.protocol, ports: r.ports, wan: r.wan }),
+                                  { enable: false, protocol: r.protocol, ports: r.ports,
+                                    wan: r.wan, family: 'both' }),
                                   `已取消 ${r.protocol.toUpperCase()} ${r.ports}`)}>
                                 取消放通
                               </button>
@@ -261,9 +277,14 @@ export default function NetworkFirewall() {
                   信任整个内网：允许内网接口访问任何目标。适合"内网默认拒绝"的路由器。
                 </div>
               </div>
-              {lanAll && <StateBadge state={lanAll} />}
+              {lanAll && (
+                <span className="inline-flex gap-1.5 shrink-0 whitespace-nowrap">
+                  <Badge tone={lanAll.v4.allowed ? 'signal' : 'gray'}>IPv4</Badge>
+                  <Badge tone={lanAll.v6.allowed ? 'signal' : 'gray'}>IPv6</Badge>
+                </span>
+              )}
             </div>
-            {lanAll?.user_rule && !lanAll.managed && (
+            {lanAll && (lanAll.v4.user_rule || lanAll.v6.user_rule) && (
               <div className="mt-2 text-[11.5px] text-t3">检测到你已有等效的自建规则，取消时不会删除它。</div>
             )}
             <div className="flex gap-2 mt-4">
@@ -284,7 +305,12 @@ export default function NetworkFirewall() {
                   对被选 WAN 放通全部进站流量。放通后请配合 /ip service 的可用源地址限制管理口。
                 </div>
               </div>
-              {wanAll && <StateBadge state={family === 'v6' ? wanAll.v6 : wanAll.v4} />}
+              {wanAll && (
+                <span className="inline-flex gap-1.5 shrink-0 whitespace-nowrap">
+                  <Badge tone={wanAll.v4.allowed ? 'signal' : 'gray'}>IPv4</Badge>
+                  <Badge tone={wanAll.v6.allowed ? 'signal' : 'gray'}>IPv6</Badge>
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2.5 mt-3">
               <div className="w-40">
@@ -304,12 +330,6 @@ export default function NetworkFirewall() {
                 onClick={() => toggleWanAll(true)}>放通</Button>
               <Button disabled={busy || !wan} onClick={() => toggleWanAll(false)}>取消</Button>
             </div>
-            {wanAll && (
-              <div className="mt-3 flex gap-3 text-[11.5px] text-t3">
-                <span>IPv4：{wanAll.v4.allowed ? '已放通' : '未放通'}</span>
-                <span>IPv6：{wanAll.v6.allowed ? '已放通' : '未放通'}</span>
-              </div>
-            )}
           </div>
 
           {/* 相关规则 */}
@@ -326,7 +346,7 @@ export default function NetworkFirewall() {
                 <tbody>
                   {relatedRules.map(r => {
                     const match = [
-                      r.protocol && `${r.protocol}/${r.dst_port || 'any'}`,
+                      `${r.family === 'v6' ? 'v6 ' : ''}${r.protocol ? `${r.protocol}/${r.dst_port || 'any'}` : ''}`.trim(),
                       r.in_interface && `in=${r.in_interface}`,
                       r.in_interface_list && `list=${r.in_interface_list}`,
                       r.src_address && `src=${r.src_address}`,
