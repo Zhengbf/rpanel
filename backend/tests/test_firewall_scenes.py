@@ -145,6 +145,51 @@ async def test_wan_all_v4_and_v6():
 
 
 @pytest.mark.asyncio
+async def test_wan_all_recognises_handwritten_rule_without_src_address():
+    """手写的 in-interface=wan + accept（不写 src-address）就是 WAN→ALL，v4/v6 都算。"""
+    rules = [
+        {".id": "*1", "chain": "input", "action": "accept", "comment": "established"},
+        {".id": "*2", "chain": "input", "action": "drop", "comment": "deny"},
+        {".id": "*3", "chain": "forward", "action": "accept", "comment": "established"},
+        {".id": "*9", "chain": "forward", "action": "accept",
+         "in-interface": "pppoe-wan1", "comment": "wan1-in"},
+        {".id": "*4", "chain": "forward", "action": "drop", "comment": "deny"},
+    ]
+    status = await fs.build_status(FakeClient(rules))
+    entry = next(w for w in status["scenes"]["wan_all"] if w["wan"] == "pppoe-wan1")
+    assert entry["v4"]["allowed"] is True
+    assert entry["v6"]["allowed"] is True
+    assert entry["v4"]["user_rule"] is True
+    assert entry["v4"]["managed"] is False
+
+
+@pytest.mark.asyncio
+async def test_wan_all_ignores_rules_with_extra_conditions():
+    rules = [
+        {".id": "*1", "chain": "forward", "action": "accept", "comment": "established"},
+        {".id": "*2", "chain": "forward", "action": "accept", "in-interface": "pppoe-wan1",
+         "connection-state": "established,related", "comment": "只放已建立"},
+        {".id": "*3", "chain": "forward", "action": "accept", "in-interface": "pppoe-wan1",
+         "protocol": "tcp", "dst-port": "80", "comment": "只放 80"},
+        {".id": "*4", "chain": "forward", "action": "drop", "comment": "deny"},
+    ]
+    status = await fs.build_status(FakeClient(rules))
+    entry = next(w for w in status["scenes"]["wan_all"] if w["wan"] == "pppoe-wan1")
+    assert entry["v4"]["allowed"] is False
+
+
+@pytest.mark.asyncio
+async def test_wan_all_recognises_interface_list_wan():
+    rules = [
+        {".id": "*1", "chain": "forward", "action": "accept",
+         "in-interface-list": "WAN", "comment": "我的整组放通"},
+    ]
+    status = await fs.build_status(FakeClient(rules))
+    entry = next(w for w in status["scenes"]["wan_all"] if w["wan"] == "pppoe-wan1")
+    assert entry["v4"]["allowed"] is True
+
+
+@pytest.mark.asyncio
 async def test_lan_all_uses_interface_list_and_protects_user_rules():
     client = FakeClient(base_rules())
     await fs.set_lan_all(client, True)

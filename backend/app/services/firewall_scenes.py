@@ -85,14 +85,35 @@ def matches_lan_all(rule: dict, lan_names: list[str], use_list: bool) -> bool:
     return _text(rule.get("in-interface")) in lan_names
 
 
+def _address_families(rule: dict) -> set[str]:
+    """这条规则覆盖哪些地址族。
+
+    不写 src-address 时 RouterOS 对 IPv4/IPv6 都生效——很多手写的
+    "WAN 全放通"就是这种形态，不能要求用户显式写 0.0.0.0/0 才认。
+    """
+    src = _text(rule.get("src-address"))
+    if not src:
+        return {"v4", "v6"}
+    if src == "0.0.0.0/0":
+        return {"v4"}
+    if src == "::/0":
+        return {"v6"}
+    return set()
+
+
 def matches_wan_all(rule: dict, wan: str, family: str) -> bool:
     if _text(rule.get("action")) != "accept" or _text(rule.get("chain")) not in CHAINS:
         return False
-    if _text(rule.get("in-interface")) != wan:
+    # 入口既可以是具体 WAN 口，也可以是用 in-interface-list=WAN 写成整组
+    by_iface = _text(rule.get("in-interface")) == wan
+    by_list = _text(rule.get("in-interface-list")).upper() == "WAN"
+    if not (by_iface or by_list):
         return False
-    if not _blank(rule, "protocol", "dst-port"):
+    # 场景是"全放通"：任何额外限制（协议/端口/地址/连接状态）都说明不是它
+    if not _blank(rule, "protocol", "dst-port", "dst-address",
+                  "src-address-list", "dst-address-list", "connection-state"):
         return False
-    return _text(rule.get("src-address")) == ("0.0.0.0/0" if family == "v4" else "::/0")
+    return family in _address_families(rule)
 
 
 async def interface_sets(client: RouterOsClient) -> dict:
