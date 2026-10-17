@@ -5,14 +5,16 @@
  * 只需要在 TABS 里加一项 + 写一个子组件，左侧导航不必再动。
  */
 import { useNavigate, useParams } from 'react-router-dom'
-import { Network as NetworkIcon, Route, Waypoints, Shield } from 'lucide-react'
+import { Network as NetworkIcon, Route, Waypoints } from 'lucide-react'
 import NetworkDhcp from './NetworkDhcp'
 import PortForward from './PortForward'
+import NetworkFirewall from './NetworkFirewall'
 import { Segmented, EmptyState } from '../components/ui'
 
 const TABS = [
   { key: 'dhcp', label: 'DHCP' },
   { key: 'port-forward', label: '端口转发' },
+  { key: 'firewall', label: '防火墙' },
   { key: 'planned', label: '更多功能' },
 ] as const
 
@@ -20,14 +22,15 @@ const TABS = [
 const PLANNED = [
   { icon: Route, title: '静态路由', desc: '查看与维护 /ip route，含默认路由与多 WAN 策略' },
   { icon: Waypoints, title: '端口映射', desc: '查看与维护 dst-nat 规则，一键暴露内网服务' },
-  { icon: Shield, title: '防火墙规则', desc: '按链/表查看规则，受 managed-by 标记保护，只动手动规则之外的部分' },
 ]
 
 export default function NetworkPage() {
   const nav = useNavigate()
   const params = useParams()
   const rawTab = params.tab as string
-  const tab = rawTab === 'port-forward' ? 'port-forward' : rawTab === 'planned' ? 'planned' : 'dhcp'
+  const tab = rawTab === 'port-forward' || rawTab === 'firewall' || rawTab === 'planned'
+    ? rawTab
+    : 'dhcp'
 
   return (
     <div className="animate-in">
@@ -46,6 +49,8 @@ export default function NetworkPage() {
         ? <NetworkDhcp />
         : tab === 'port-forward'
           ? <PortForward />
+          : tab === 'firewall'
+            ? <NetworkFirewall />
           : (
           <div className="card p-6">
             <div className="text-[14px] font-semibold mb-1">规划中的网络功能</div>
