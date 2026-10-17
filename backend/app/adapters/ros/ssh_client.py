@@ -374,10 +374,23 @@ class SshRouterOsClient:
     # --- 防火墙 filter 规则（一键放通场景使用）---
 
     async def list_filter_rules(self) -> list[dict]:
-        out = await self._run(_CMD_FILTER_DETAIL)
-        return parse_detail_blocks(out)
+        result: list[dict] = []
+        for family, cmd in (("v4", _CMD_FILTER_DETAIL),
+                            ("v6", "/ipv6/firewall/filter/print detail")):
+            try:
+                out = await self._run(cmd)
+            except Exception:
+                if family == "v6":
+                    continue
+                raise
+            for rule in parse_detail_blocks(out):
+                item = dict(rule)
+                item["_family"] = family
+                result.append(item)
+        return result
 
-    async def add_filter_rule(self, fields: dict, place_before: str | None = None) -> dict:
+    async def add_filter_rule(self, fields: dict, place_before: str | None = None,
+                              family: str = "v4") -> dict:
         parts: list[str] = []
         for key, value in fields.items():
             if value in (None, ""):
@@ -393,13 +406,15 @@ class SshRouterOsClient:
             if not _SAFE_ID.match(place_before):
                 raise ValueError(f"非法规则 ID: {place_before!r}")
             parts.append(f"place-before={place_before}")
-        await self._run("/ip/firewall/filter/add " + " ".join(parts))
+        prefix = "/ipv6/firewall/filter" if family == "v6" else "/ip/firewall/filter"
+        await self._run(f"{prefix}/add " + " ".join(parts))
         return {}
 
-    async def remove_filter_rule(self, rule_id: str) -> None:
+    async def remove_filter_rule(self, rule_id: str, family: str = "v4") -> None:
         if not _SAFE_ID.match(rule_id):
             raise ValueError(f"非法规则 ID: {rule_id!r}")
-        await self._run(f"/ip/firewall/filter/remove {rule_id}")
+        prefix = "/ipv6/firewall/filter" if family == "v6" else "/ip/firewall/filter"
+        await self._run(f"{prefix}/remove {rule_id}")
 
     async def list_interface_list_members(self) -> list[dict]:
         out = await self._run("/interface/list/member/print detail")
