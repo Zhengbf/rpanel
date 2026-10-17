@@ -371,6 +371,40 @@ class SshRouterOsClient:
             raise ValueError(f"非法服务器 ID: {server_id!r}")
         await self._run(f"/ip/dhcp-server/remove {server_id}")
 
+    # --- 防火墙 filter 规则（一键放通场景使用）---
+
+    async def list_filter_rules(self) -> list[dict]:
+        out = await self._run(_CMD_FILTER_DETAIL)
+        return parse_detail_blocks(out)
+
+    async def add_filter_rule(self, fields: dict, place_before: str | None = None) -> dict:
+        parts: list[str] = []
+        for key, value in fields.items():
+            if value in (None, ""):
+                continue
+            if key not in ("chain", "action", "protocol", "dst-port", "in-interface",
+                           "in-interface-list", "src-address", "comment"):
+                raise ValueError(f"不允许的规则字段: {key}")
+            text = str(value)
+            if any(ch in text for ch in ('"', "\\", "\n", "\r")):
+                raise ValueError(f"字段 {key} 含非法字符")
+            parts.append(f'{key}="{text}"')
+        if place_before:
+            if not _SAFE_ID.match(place_before):
+                raise ValueError(f"非法规则 ID: {place_before!r}")
+            parts.append(f"place-before={place_before}")
+        await self._run("/ip/firewall/filter/add " + " ".join(parts))
+        return {}
+
+    async def remove_filter_rule(self, rule_id: str) -> None:
+        if not _SAFE_ID.match(rule_id):
+            raise ValueError(f"非法规则 ID: {rule_id!r}")
+        await self._run(f"/ip/firewall/filter/remove {rule_id}")
+
+    async def list_interface_list_members(self) -> list[dict]:
+        out = await self._run("/interface/list/member/print detail")
+        return parse_detail_blocks(out)
+
     async def _ensure_drop_rule(self, wan_interfaces: list[str] | None = None) -> None:
         """按 WAN 口逐口创建 drop 规则。幂等。"""
         out = await self._run(_CMD_FILTER_DETAIL)

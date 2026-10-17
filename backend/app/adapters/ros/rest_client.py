@@ -75,6 +75,18 @@ class RestRouterOsClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def _put(self, path: str, body: dict) -> dict:
+        # RouterOS 7 的 REST 用 PUT 新增条目，POST 只用于执行命令
+        client = await self._get_client()
+        resp = await client.put(path, json=body)
+        resp.raise_for_status()
+        return resp.json() if resp.content else {}
+
+    async def _delete(self, path: str) -> None:
+        client = await self._get_client()
+        resp = await client.delete(path)
+        resp.raise_for_status()
+
 
     async def test_connection(self) -> ConnectionTestResult:
         try:
@@ -552,6 +564,27 @@ class RestRouterOsClient:
                         await self._post("/ip/firewall/connection/remove", {".id": rid})
                     except httpx.HTTPError:
                         pass
+
+    # --- 防火墙 filter 规则（一键放通场景使用）---
+
+    async def list_filter_rules(self) -> list[dict]:
+        rules = await self._get("/ip/firewall/filter")
+        return rules if isinstance(rules, list) else []
+
+    async def add_filter_rule(self, fields: dict, place_before: str | None = None) -> dict:
+        body = dict(fields)
+        body.setdefault("comment", self.MANAGED_TAG)
+        if place_before:
+            body["place-before"] = place_before
+        return await self._put("/ip/firewall/filter", body)
+
+    async def remove_filter_rule(self, rule_id: str) -> None:
+        await self._delete(f"/ip/firewall/filter/{rule_id}")
+
+    async def list_interface_list_members(self) -> list[dict]:
+        """接口列表成员（LAN / WAN），用于判断哪些口是 LAN、哪些是 WAN。"""
+        members = await self._get("/interface/list/member")
+        return members if isinstance(members, list) else []
 
     async def close(self) -> None:
         if self._client and not self._client.is_closed:
