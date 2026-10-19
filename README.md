@@ -2,7 +2,7 @@
 
 ![RPanel](docs/images/dashboard.png)
 
-**RPanel** 是一个面向家庭内网的 MikroTik RouterOS 7 管理面板，用于实时查看终端、流量、DHCP、端口转发，并支持一键封禁。
+**RPanel** 是一个面向家庭内网的 MikroTik RouterOS 7 管理面板，用于实时查看终端、流量、DHCP、端口转发与防火墙，并支持一键封禁。
 
 全部功能只在内网运行，不依赖云服务。
 
@@ -49,6 +49,15 @@
 - 表格式查看端口转发规则
 - 新增 / 编辑 / 删除
 - 接口下拉选择
+
+### 防火墙
+
+![Firewall](docs/images/firewall.png)
+
+- 一键放通外部进来的端口，自动在 input / forward 两条链各建一条规则
+- 按 WAN 口生效，IPv4 / IPv6 独立选择；IPv6 写入独立的 `/ipv6/firewall/filter`
+- 常见场景一键放通 / 取消：LAN → ALL、WAN → ALL（含 IPv4 / IPv6 开关）
+- 识别路由器上已有的等效规则；只创建和删除带 `managed-by=router-panel` 标记的规则，手写规则只读展示
 
 ### 系统设置
 
