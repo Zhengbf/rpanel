@@ -271,10 +271,10 @@ async def test_provision_refuses_to_overwrite_other_subnet_pool():
     db = FakeDb()
     with pytest.raises(ValueError) as ei:
         await NetworkService(client).provision_dhcp(
-            db, network_cidr="192.168.88.0/24", gateway="192.168.88.1",
-            pool_name="dhcp-lan",                       # 已存在，但范围是 192.168.88.x
-            pool_ranges="192.168.88.100-192.168.88.200",
-            server_name="dhcp-88", interface="bridge", dns_server="192.168.88.1",
+            db, network_cidr="192.168.99.0/24", gateway="192.168.99.1",
+            pool_name="dhcp-lan",                       # 同名，但已存在的范围是另一个网段
+            pool_ranges="192.168.99.100-192.168.99.200",
+            server_name="dhcp-99", interface="bridge", dns_server="192.168.99.1",
             lease_time="1d", comment="", operator_id=1, operator_name="admin")
     assert "范围不同" in str(ei.value)
     assert not getattr(client, "pools_set", [])         # 绝不能去改现有池
